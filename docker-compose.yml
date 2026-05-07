@@ -1,0 +1,32 @@
+version: '3.8'
+services:
+  backend:
+    build: .
+    container_name: expense-backend
+    ports:
+      - "8080:8080"
+    depends_on:
+      - mysql-db
+    environment:
+      # Example: set DB connection details if needed
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql-db:3306/expense_tracker
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: root
+    networks:
+      - expense-net
+
+  mysql-db:
+    image: mysql:8
+    container_name: mysql-db
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: expense_tracker
+    ports:
+      - "3307:3306"
+    networks:
+      - expense-net
+
+networks:
+  expense-net:
+    driver: bridge
+
