@@ -2,20 +2,12 @@ FROM eclipse-temurin:17-jdk-jammy
 
 WORKDIR /app
 
-# Copy Maven files first
-COPY .mvn .mvn
-COPY mvnw pom.xml ./
+COPY . .
 
-# Force fresh dependency download
-RUN ./mvnw dependency:purge-local-repository -DreResolve=true
+RUN apt-get update && apt-get install -y maven
+RUN mvn dependency:purge-local-repository -DreResolve=true
+RUN mvn clean package -DskipTests
 
-# Copy source code
-COPY src src
-
-# Build the application
-RUN ./mvnw clean package -DskipTests
-
-# Copy generated jar
 RUN cp target/*.jar app.jar
 
 EXPOSE 8080
