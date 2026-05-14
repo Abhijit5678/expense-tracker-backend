@@ -4,9 +4,12 @@ import com.tracker.expense.dto.CreditCardRequest;
 import com.tracker.expense.dto.CreditCardResponse;
 import com.tracker.expense.entity.CreditCard;
 import com.tracker.expense.entity.CreditCardBill;
+import com.tracker.expense.entity.User;
 import com.tracker.expense.exception.ResourceNotFoundException;
 import com.tracker.expense.repository.CreditCardBillRepository;
 import com.tracker.expense.repository.CreditCardRepository;
+import com.tracker.expense.repository.UserRepository;
+import com.tracker.expense.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,24 +28,45 @@ public class CreditCardService {
 
     private final CreditCardRepository creditCardRepository;
     private final CreditCardBillRepository creditCardBillRepository;
+    private final UserRepository userRepository;
+
+    private User getCurrentUser() {
+        String username = SecurityUtil.getCurrentUsername();
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
 
     public CreditCardResponse addCreditCard(CreditCardRequest request) {
+        User currentUser = getCurrentUser();
+        
         CreditCard card = CreditCard.builder()
                 .cardName(request.getCardName())
                 .statementDay(request.getStatementDay())
                 .dueDay(request.getDueDay())
+                .user(currentUser)
                 .build();
         return mapToResponse(creditCardRepository.save(card));
     }
 
     public List<CreditCardResponse> getAllCreditCards() {
-        return creditCardRepository.findAll().stream()
+        User currentUser = getCurrentUser();
+        return creditCardRepository.findByUser(currentUser).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
     @Transactional
     public void markBillAsPaid(Long cardId, String statementMonth) {
+        User currentUser = getCurrentUser();
+        
+        CreditCard card = creditCardRepository.findById(cardId)
+                .orElseThrow(() -> new ResourceNotFoundException("Credit Card not found"));
+        
+        // Verify that the card belongs to the current user
+        if (!card.getUser().getId().equals(currentUser.getId())) {
+            throw new ResourceNotFoundException("Credit Card not found");
+        }
+        
         CreditCardBill bill = creditCardBillRepository.findByCreditCardIdAndStatementMonth(cardId, statementMonth)
                 .orElseThrow(() -> new ResourceNotFoundException("Bill not found"));
         

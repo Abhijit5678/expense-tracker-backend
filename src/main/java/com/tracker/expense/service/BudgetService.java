@@ -3,8 +3,11 @@ package com.tracker.expense.service;
 import com.tracker.expense.dto.BudgetRequest;
 import com.tracker.expense.dto.BudgetResponse;
 import com.tracker.expense.entity.Budget;
+import com.tracker.expense.entity.User;
 import com.tracker.expense.exception.ResourceNotFoundException;
 import com.tracker.expense.repository.BudgetRepository;
+import com.tracker.expense.repository.UserRepository;
+import com.tracker.expense.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,11 +21,22 @@ import java.time.format.DateTimeFormatter;
 public class BudgetService {
 
     private final BudgetRepository budgetRepository;
+    private final UserRepository userRepository;
+
+    private User getCurrentUser() {
+        String username = SecurityUtil.getCurrentUsername();
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
 
     @Transactional
     public BudgetResponse setBudget(BudgetRequest request) {
-        Budget budget = budgetRepository.findByMonthYear(request.getMonthYear())
-                .orElse(new Budget());
+        User currentUser = getCurrentUser();
+        
+        Budget budget = budgetRepository.findByUserAndMonthYear(currentUser, request.getMonthYear())
+                .orElse(Budget.builder()
+                        .user(currentUser)
+                        .build());
         
         budget.setMonthYear(request.getMonthYear());
         budget.setAmount(request.getAmount());
@@ -35,7 +49,9 @@ public class BudgetService {
     }
 
     public BudgetResponse getBudget(String monthYear) {
-        Budget budget = budgetRepository.findByMonthYear(monthYear)
+        User currentUser = getCurrentUser();
+        
+        Budget budget = budgetRepository.findByUserAndMonthYear(currentUser, monthYear)
                 .orElseThrow(() -> new ResourceNotFoundException("Budget not set for: " + monthYear));
         return mapToResponse(budget);
     }
@@ -46,8 +62,9 @@ public class BudgetService {
 
     @Transactional
     public void updateBudgetSpent(LocalDate date, BigDecimal amount) {
+        User currentUser = getCurrentUser();
         String monthYear = date.format(DateTimeFormatter.ofPattern("yyyy-MM"));
-        budgetRepository.findByMonthYear(monthYear).ifPresent(budget -> {
+        budgetRepository.findByUserAndMonthYear(currentUser, monthYear).ifPresent(budget -> {
             budget.setCurrentSpent(budget.getCurrentSpent().add(amount));
             budgetRepository.save(budget);
         });
@@ -55,8 +72,9 @@ public class BudgetService {
 
     @Transactional
     public void revertBudgetSpent(LocalDate date, BigDecimal amount) {
+        User currentUser = getCurrentUser();
         String monthYear = date.format(DateTimeFormatter.ofPattern("yyyy-MM"));
-        budgetRepository.findByMonthYear(monthYear).ifPresent(budget -> {
+        budgetRepository.findByUserAndMonthYear(currentUser, monthYear).ifPresent(budget -> {
             budget.setCurrentSpent(budget.getCurrentSpent().subtract(amount));
             budgetRepository.save(budget);
         });

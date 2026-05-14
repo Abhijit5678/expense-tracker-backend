@@ -4,8 +4,13 @@ import com.tracker.expense.dto.TransactionRequest;
 import com.tracker.expense.dto.TransactionResponse;
 import com.tracker.expense.entity.Transaction;
 import com.tracker.expense.entity.TransactionType;
+import com.tracker.expense.entity.User;
 import com.tracker.expense.exception.ResourceNotFoundException;
 import com.tracker.expense.repository.TransactionRepository;
+import com.tracker.expense.repository.UserRepository;
+import com.tracker.expense.repository.CreditCardRepository;
+import com.tracker.expense.repository.CreditCardBillRepository;
+import com.tracker.expense.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,12 +24,21 @@ import java.util.stream.Collectors;
 public class TransactionService {
 
     private final TransactionRepository transactionRepository;
+    private final UserRepository userRepository;
     private final BudgetService budgetService;
     private final com.tracker.expense.repository.CreditCardRepository creditCardRepository;
     private final com.tracker.expense.repository.CreditCardBillRepository creditCardBillRepository;
 
+    private User getCurrentUser() {
+        String username = SecurityUtil.getCurrentUsername();
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
+
     @Transactional
     public TransactionResponse createTransaction(TransactionRequest request) {
+        User currentUser = getCurrentUser();
+        
         Transaction transaction = Transaction.builder()
                 .amount(request.getAmount())
                 .type(request.getType())
@@ -33,11 +47,17 @@ public class TransactionService {
                 .description(request.getDescription())
                 .paymentMethod(request.getPaymentMethod() != null ? request.getPaymentMethod() : com.tracker.expense.entity.PaymentMethod.CASH)
                 .isReimbursed(request.isReimbursed())
+                .user(currentUser)
                 .build();
 
         if (request.getPaymentMethod() == com.tracker.expense.entity.PaymentMethod.CREDIT_CARD && request.getCreditCardId() != null) {
             com.tracker.expense.entity.CreditCard card = creditCardRepository.findById(request.getCreditCardId())
                     .orElseThrow(() -> new ResourceNotFoundException("Credit Card not found"));
+            
+            // Verify that the card belongs to the current user
+            if (!card.getUser().getId().equals(currentUser.getId())) {
+                throw new ResourceNotFoundException("Credit Card not found");
+            }
             transaction.setCreditCard(card);
         }
 
@@ -55,21 +75,30 @@ public class TransactionService {
     }
 
     public List<TransactionResponse> getAllTransactions() {
-        return transactionRepository.findAll().stream()
+        User currentUser = getCurrentUser();
+        return transactionRepository.findByUserOrderByTransactionDateDesc(currentUser).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
     public List<TransactionResponse> filterTransactions(TransactionType type, String category, LocalDate startDate, LocalDate endDate) {
-        return transactionRepository.filterTransactions(type, category, startDate, endDate).stream()
+        User currentUser = getCurrentUser();
+        return transactionRepository.filterTransactionsByUser(currentUser, type, category, startDate, endDate).stream()
                 .map(this::mapToResponse)
                 .collect(Collectors.toList());
     }
 
     @Transactional
     public TransactionResponse updateTransaction(Long id, TransactionRequest request) {
+        User currentUser = getCurrentUser();
+        
         Transaction transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
+
+        // Verify that the transaction belongs to the current user
+        if (!transaction.getUser().getId().equals(currentUser.getId())) {
+            throw new ResourceNotFoundException("Transaction not found with id: " + id);
+        }
 
         // Revert old budget and old bill if expense
         if (transaction.getType() == TransactionType.EXPENSE) {
@@ -92,6 +121,11 @@ public class TransactionService {
         if (request.getPaymentMethod() == com.tracker.expense.entity.PaymentMethod.CREDIT_CARD && request.getCreditCardId() != null) {
             com.tracker.expense.entity.CreditCard card = creditCardRepository.findById(request.getCreditCardId())
                     .orElseThrow(() -> new ResourceNotFoundException("Credit Card not found"));
+            
+            // Verify that the card belongs to the current user
+            if (!card.getUser().getId().equals(currentUser.getId())) {
+                throw new ResourceNotFoundException("Credit Card not found");
+            }
             transaction.setCreditCard(card);
         } else {
             transaction.setCreditCard(null);
@@ -114,8 +148,15 @@ public class TransactionService {
 
     @Transactional
     public void deleteTransaction(Long id) {
+        User currentUser = getCurrentUser();
+        
         Transaction transaction = transactionRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Transaction not found with id: " + id));
+
+        // Verify that the transaction belongs to the current user
+        if (!transaction.getUser().getId().equals(currentUser.getId())) {
+            throw new ResourceNotFoundException("Transaction not found with id: " + id);
+        }
 
         if (transaction.getType() == TransactionType.EXPENSE) {
             if (!transaction.isReimbursed()) {
