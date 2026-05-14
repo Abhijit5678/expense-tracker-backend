@@ -54,14 +54,35 @@ public class AuthController {
                             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
             }
     )
-    @PostMapping("/login")
-    public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
-        try {
-            AuthResponse response = authService.login(request);
-            return ResponseEntity.ok(response);
-        } catch (Exception e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
-                    .body(java.util.Map.of("message", "Invalid username or password"));
-        }
-    }
+     @PostMapping("/login")
+     public ResponseEntity<?> login(@Valid @RequestBody LoginRequest request) {
+         try {
+             AuthResponse response = authService.login(request);
+             return ResponseEntity.ok(response);
+         } catch (Exception e) {
+             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                     .body(java.util.Map.of("message", "Invalid username or password"));
+         }
+     }
+
+     @Operation(
+             summary = "Generate JWT Token",
+             description = "Creates a JWT token for the given credentials. Use this token in the Authorization header (Bearer <token>) for subsequent requests. Copy the token value from the response and paste it in the 'Authorize' section of Swagger UI.",
+             responses = {
+                     @ApiResponse(responseCode = "200", description = "Token generated successfully",
+                             content = @Content(schema = @Schema(implementation = AuthResponse.class))),
+                     @ApiResponse(responseCode = "401", description = "Invalid credentials",
+                             content = @Content(schema = @Schema(implementation = ErrorResponse.class)))
+             }
+     )
+     @PostMapping("/generate-token")
+     public ResponseEntity<?> generateToken(@Valid @RequestBody LoginRequest request) {
+         try {
+             AuthResponse response = authService.login(request);
+             return ResponseEntity.ok(response);
+         } catch (Exception e) {
+             return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                     .body(java.util.Map.of("message", "Invalid username or password"));
+         }
+     }
 }

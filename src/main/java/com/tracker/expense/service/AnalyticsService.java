@@ -5,7 +5,11 @@ import com.tracker.expense.dto.CategoryExpense;
 import com.tracker.expense.dto.MonthlyTrend;
 import com.tracker.expense.entity.Transaction;
 import com.tracker.expense.entity.TransactionType;
+import com.tracker.expense.entity.User;
+import com.tracker.expense.exception.ResourceNotFoundException;
 import com.tracker.expense.repository.TransactionRepository;
+import com.tracker.expense.repository.UserRepository;
+import com.tracker.expense.security.SecurityUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,9 +24,17 @@ import java.util.stream.Collectors;
 public class AnalyticsService {
 
     private final TransactionRepository transactionRepository;
+    private final UserRepository userRepository;
+
+    private User getCurrentUser() {
+        String username = SecurityUtil.getCurrentUsername();
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+    }
 
     public AnalyticsSummary getSummary() {
-        List<Transaction> transactions = transactionRepository.findAll();
+        User currentUser = getCurrentUser();
+        List<Transaction> transactions = transactionRepository.findByUserOrderByTransactionDateDesc(currentUser);
         
         BigDecimal totalIncome = transactions.stream()
                 .filter(t -> t.getType() == TransactionType.INCOME)
@@ -42,7 +54,8 @@ public class AnalyticsService {
     }
 
     public List<CategoryExpense> getCategoryWiseExpense() {
-        List<Transaction> expenses = transactionRepository.findByType(TransactionType.EXPENSE).stream()
+        User currentUser = getCurrentUser();
+        List<Transaction> expenses = transactionRepository.findByUserAndType(currentUser, TransactionType.EXPENSE).stream()
                 .filter(t -> !t.isReimbursed())
                 .collect(Collectors.toList());
         
@@ -58,7 +71,8 @@ public class AnalyticsService {
     }
 
     public List<MonthlyTrend> getMonthlyTrend() {
-        List<Transaction> expenses = transactionRepository.findByType(TransactionType.EXPENSE).stream()
+        User currentUser = getCurrentUser();
+        List<Transaction> expenses = transactionRepository.findByUserAndType(currentUser, TransactionType.EXPENSE).stream()
                 .filter(t -> !t.isReimbursed())
                 .collect(Collectors.toList());
         DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyy-MM");
